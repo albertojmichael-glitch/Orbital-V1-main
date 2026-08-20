@@ -13,15 +13,16 @@ document.body.style.position = "relative";
 document.body.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
 
 // ============================================================
-// ESTRELAS (STARFIELD)
+// ESTRELAS (STARFIELD COM PARALLAX)
 // ============================================================
 const stars: {x: number, y: number, radius: number, alpha: number}[] = [];
-for (let i = 0; i < 500; i++) {
+// Aumentei para 800 estrelas, espalhadas por um espaço gigante, maiores e mais brilhantes!
+for (let i = 0; i < 800; i++) {
     stars.push({
-        x: (Math.random() - 0.5) * 4000,
-        y: (Math.random() - 0.5) * 4000,
-        radius: Math.random() * 1.5 + 0.2,
-        alpha: Math.random() * 0.8 + 0.2
+        x: (Math.random() - 0.5) * 8000,
+        y: (Math.random() - 0.5) * 8000,
+        radius: Math.random() * 2.0 + 0.5, 
+        alpha: Math.random() * 0.7 + 0.3
     });
 }
 
@@ -336,17 +337,18 @@ function applyGravity(x: number, y: number, vx: number, vy: number, moonX: numbe
     return { x: x + (vx + ax * dt) * dt, y: y + (vy + ay * dt) * dt, vx: vx + ax * dt, vy: vy + ay * dt };
 }
 
+// ============================================================
+// O SEGREDO DA LINHA DE TRAJETÓRIA (COM FOCO RELATIVO NA LUA)
+// ============================================================
 function drawTrajectory() {
     let simX = rocket.x, simY = rocket.y, simVx = rocket.vx, simVy = rocket.vy, simMoonAngle = moonAngle;
     const PREDICT_DT = PHYSICS_DT * 6;
 
-    // Pegamos a posição ATUAL da Lua para "ancorar" o desenho se a câmera estiver focada nela
     const currentMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
     const currentMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
 
     ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; ctx.lineWidth = 1.5 / cameraZoom; ctx.beginPath(); 
     
-    // Início da linha
     let startDrawX = simX, startDrawY = simY;
     if (cameraTarget === "MOON") {
         startDrawX = currentMoonX + (simX - currentMoonX);
@@ -354,9 +356,6 @@ function drawTrajectory() {
     }
     ctx.moveTo(startDrawX, startDrawY);
 
-    // ==========================================
-    // 1. PREVISÃO ANTES DO NÓ DE MANOBRA
-    // ==========================================
     for (let i = 0; i < maneuverTime; i++) {
         simMoonAngle += MOON_ORBIT_SPEED * PREDICT_DT; 
         const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE; 
@@ -367,7 +366,6 @@ function drawTrajectory() {
         
         if (i % 5 === 0) {
             let drawX = simX, drawY = simY;
-            // A MÁGICA ACONTECE AQUI: Subtraímos a Lua do Futuro e somamos a Lua do Presente!
             if (cameraTarget === "MOON") {
                 drawX = currentMoonX + (simX - simMoonX);
                 drawY = currentMoonY + (simY - simMoonY);
@@ -377,9 +375,6 @@ function drawTrajectory() {
     }
     ctx.stroke();
 
-    // ==========================================
-    // 2. DESENHO DA BOLINHA DO NÓ
-    // ==========================================
     if (isPaused) {
         ctx.fillStyle = "#f6a84b"; ctx.beginPath(); 
         let nodeDrawX = simX, nodeDrawY = simY;
@@ -396,9 +391,6 @@ function drawTrajectory() {
         if (speed > 0) { simVx += (simVx / speed) * plannedDeltaV; simVy += (simVy / speed) * plannedDeltaV; }
     }
 
-    // ==========================================
-    // 3. PREVISÃO DEPOIS DO NÓ DE MANOBRA
-    // ==========================================
     ctx.strokeStyle = isPaused ? "#f6a84b" : "rgba(255, 255, 255, 0.4)"; ctx.lineWidth = (isPaused ? 2.5 : 1.5) / cameraZoom; ctx.beginPath(); 
     
     let resumeDrawX = simX, resumeDrawY = simY;
@@ -456,11 +448,20 @@ function applyEngine(dt: number) {
 function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // ===================================
-    // ESTRELAS (Desenhadas no fundo fixo)
-    // ===================================
+    if (!isPaused) moonAngle += MOON_ORBIT_SPEED; 
+    const currentMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
+    const currentMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
+
     ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2);
+    ctx.translate(canvas.width / 2, canvas.height / 2); 
+    
+    // EFEITO PARALLAX NAS ESTRELAS: Elas se movem só um pouquinho conforme a câmera!
+    let targetX = EARTH_X; let targetY = EARTH_Y;
+    if (cameraTarget === "ROCKET") { targetX = rocket.x; targetY = rocket.y; } 
+    if (cameraTarget === "MOON") { targetX = currentMoonX; targetY = currentMoonY; }
+    
+    ctx.save();
+    ctx.translate(-targetX * 0.02, -targetY * 0.02); // 2% da velocidade da câmera
     stars.forEach(star => { 
         ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`; 
         ctx.beginPath(); 
@@ -469,14 +470,7 @@ function gameLoop() {
     });
     ctx.restore();
 
-    if (!isPaused) moonAngle += MOON_ORBIT_SPEED; 
-    const currentMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
-    const currentMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
-
-    ctx.save();
-    ctx.translate(canvas.width / 2, canvas.height / 2); ctx.scale(cameraZoom, cameraZoom);
-    let targetX = EARTH_X; let targetY = EARTH_Y;
-    if (cameraTarget === "ROCKET") { targetX = rocket.x; targetY = rocket.y; } if (cameraTarget === "MOON") { targetX = currentMoonX; targetY = currentMoonY; }
+    ctx.scale(cameraZoom, cameraZoom);
     ctx.translate(-targetX, -targetY);
 
     if (gameState === "VOO") {
@@ -503,7 +497,6 @@ function gameLoop() {
                     if (selectedContract.id === "FLYBY" && distMoon < MOON_SOI) completeContract();
                 }
 
-                // COLISÃO COM BREAK (Impede o foguete de atravessar o planeta)
                 const distE = Math.sqrt((rocket.x - EARTH_X)**2 + (rocket.y - EARTH_Y)**2);
                 if (distE <= EARTH_RADIUS) { endMission("TERRA", speed); break; } 
                 
@@ -512,9 +505,6 @@ function gameLoop() {
             }
         }
         
-        // ===================================
-        // DESENHANDO A NAVE E O FOGO
-        // ===================================
         ctx.save();
         ctx.translate(rocket.x, rocket.y); ctx.rotate(rocket.angle);
         if ((isBurningPrograde || isBurningRetrograde) && rocket.currentFuel > 0 && !isPaused) {
