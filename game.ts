@@ -339,24 +339,96 @@ function applyGravity(x: number, y: number, vx: number, vy: number, moonX: numbe
 function drawTrajectory() {
     let simX = rocket.x, simY = rocket.y, simVx = rocket.vx, simVy = rocket.vy, simMoonAngle = moonAngle;
     const PREDICT_DT = PHYSICS_DT * 6;
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; ctx.lineWidth = 1.5 / cameraZoom; ctx.beginPath(); ctx.moveTo(simX, simY);
+
+    // Pegamos a posição ATUAL da Lua para "ancorar" o desenho se a câmera estiver focada nela
+    const currentMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
+    const currentMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
+
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; ctx.lineWidth = 1.5 / cameraZoom; ctx.beginPath(); 
+    
+    // Início da linha
+    let startDrawX = simX, startDrawY = simY;
+    if (cameraTarget === "MOON") {
+        startDrawX = currentMoonX + (simX - currentMoonX);
+        startDrawY = currentMoonY + (simY - currentMoonY);
+    }
+    ctx.moveTo(startDrawX, startDrawY);
+
+    // ==========================================
+    // 1. PREVISÃO ANTES DO NÓ DE MANOBRA
+    // ==========================================
     for (let i = 0; i < maneuverTime; i++) {
-        simMoonAngle += MOON_ORBIT_SPEED * PREDICT_DT; const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE; const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
-        const result = applyGravity(simX, simY, simVx, simVy, simMoonX, simMoonY, PREDICT_DT); simX = result.x; simY = result.y; simVx = result.vx; simVy = result.vy;
-        if (i % 5 === 0) ctx.lineTo(simX, simY);
+        simMoonAngle += MOON_ORBIT_SPEED * PREDICT_DT; 
+        const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE; 
+        const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
+        
+        const result = applyGravity(simX, simY, simVx, simVy, simMoonX, simMoonY, PREDICT_DT); 
+        simX = result.x; simY = result.y; simVx = result.vx; simVy = result.vy;
+        
+        if (i % 5 === 0) {
+            let drawX = simX, drawY = simY;
+            // A MÁGICA ACONTECE AQUI: Subtraímos a Lua do Futuro e somamos a Lua do Presente!
+            if (cameraTarget === "MOON") {
+                drawX = currentMoonX + (simX - simMoonX);
+                drawY = currentMoonY + (simY - simMoonY);
+            }
+            ctx.lineTo(drawX, drawY);
+        }
     }
     ctx.stroke();
+
+    // ==========================================
+    // 2. DESENHO DA BOLINHA DO NÓ
+    // ==========================================
     if (isPaused) {
-        ctx.fillStyle = "#f6a84b"; ctx.beginPath(); ctx.arc(simX, simY, 6 / cameraZoom, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#f6a84b"; ctx.beginPath(); 
+        let nodeDrawX = simX, nodeDrawY = simY;
+        
+        if (cameraTarget === "MOON") {
+            const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE;
+            const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
+            nodeDrawX = currentMoonX + (simX - simMoonX);
+            nodeDrawY = currentMoonY + (simY - simMoonY);
+        }
+        
+        ctx.arc(nodeDrawX, nodeDrawY, 6 / cameraZoom, 0, Math.PI * 2); ctx.fill();
         const speed = Math.sqrt(simVx**2 + simVy**2);
         if (speed > 0) { simVx += (simVx / speed) * plannedDeltaV; simVy += (simVy / speed) * plannedDeltaV; }
     }
-    ctx.strokeStyle = isPaused ? "#f6a84b" : "rgba(255, 255, 255, 0.4)"; ctx.lineWidth = (isPaused ? 2.5 : 1.5) / cameraZoom; ctx.beginPath(); ctx.moveTo(simX, simY);
+
+    // ==========================================
+    // 3. PREVISÃO DEPOIS DO NÓ DE MANOBRA
+    // ==========================================
+    ctx.strokeStyle = isPaused ? "#f6a84b" : "rgba(255, 255, 255, 0.4)"; ctx.lineWidth = (isPaused ? 2.5 : 1.5) / cameraZoom; ctx.beginPath(); 
+    
+    let resumeDrawX = simX, resumeDrawY = simY;
+    if (cameraTarget === "MOON") {
+        const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE;
+        const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
+        resumeDrawX = currentMoonX + (simX - simMoonX);
+        resumeDrawY = currentMoonY + (simY - simMoonY);
+    }
+    ctx.moveTo(resumeDrawX, resumeDrawY);
+
     for (let i = 0; i < 4000 - maneuverTime; i++) {
-        simMoonAngle += MOON_ORBIT_SPEED * PREDICT_DT; const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE; const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
-        const result = applyGravity(simX, simY, simVx, simVy, simMoonX, simMoonY, PREDICT_DT); simX = result.x; simY = result.y; simVx = result.vx; simVy = result.vy;
-        if (Math.sqrt((simX - EARTH_X)**2 + (simY - EARTH_Y)**2) <= EARTH_RADIUS) break; if (Math.sqrt((simX - simMoonX)**2 + (simY - simMoonY)**2) <= MOON_RADIUS) break;
-        if (i % 5 === 0) ctx.lineTo(simX, simY);
+        simMoonAngle += MOON_ORBIT_SPEED * PREDICT_DT; 
+        const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE; 
+        const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
+        
+        const result = applyGravity(simX, simY, simVx, simVy, simMoonX, simMoonY, PREDICT_DT); 
+        simX = result.x; simY = result.y; simVx = result.vx; simVy = result.vy;
+        
+        if (Math.sqrt((simX - EARTH_X)**2 + (simY - EARTH_Y)**2) <= EARTH_RADIUS) break; 
+        if (Math.sqrt((simX - simMoonX)**2 + (simY - simMoonY)**2) <= MOON_RADIUS) break;
+        
+        if (i % 5 === 0) {
+            let drawX = simX, drawY = simY;
+            if (cameraTarget === "MOON") {
+                drawX = currentMoonX + (simX - simMoonX);
+                drawY = currentMoonY + (simY - simMoonY);
+            }
+            ctx.lineTo(drawX, drawY);
+        }
     }
     ctx.stroke();
 }
