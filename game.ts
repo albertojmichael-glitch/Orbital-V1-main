@@ -504,9 +504,7 @@ function gameLoop() {
             }
         }
         
-        // ===================================
-        // DESENHANDO A NAVE E O FOGO
-        // ===================================
+        
         ctx.save();
         ctx.translate(rocket.x, rocket.y); ctx.rotate(rocket.angle);
         if ((isBurningPrograde || isBurningRetrograde) && rocket.currentFuel > 0 && !isPaused) {
