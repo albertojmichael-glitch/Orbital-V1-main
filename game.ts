@@ -16,7 +16,6 @@ document.body.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-seri
 // ESTRELAS (STARFIELD COM PARALLAX)
 // ============================================================
 const stars: {x: number, y: number, radius: number, alpha: number}[] = [];
-// Aumentei para 800 estrelas, espalhadas por um espaço gigante, maiores e mais brilhantes!
 for (let i = 0; i < 800; i++) {
     stars.push({
         x: (Math.random() - 0.5) * 8000,
@@ -154,7 +153,7 @@ const btnFocus = createButton("📷 Foco: Terra", "#3a4a5c");
 btnNodePrev.style.display = "none"; btnNodeNext.style.display = "none"; btnExecute.style.display = "none"; 
 
 // ============================================================
-// LÓGICA DE MENUS
+// LÓGICA DE MENUS E CONTRATOS
 // ============================================================
 document.getElementById('btnStart')?.addEventListener('click', () => {
     menuScreen.style.display = "none"; assemblyScreen.style.display = "flex"; updateAssemblyUI();
@@ -455,13 +454,13 @@ function gameLoop() {
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2); 
     
-    // EFEITO PARALLAX NAS ESTRELAS: Elas se movem só um pouquinho conforme a câmera!
+    // EFEITO PARALLAX NAS ESTRELAS
     let targetX = EARTH_X; let targetY = EARTH_Y;
     if (cameraTarget === "ROCKET") { targetX = rocket.x; targetY = rocket.y; } 
     if (cameraTarget === "MOON") { targetX = currentMoonX; targetY = currentMoonY; }
     
     ctx.save();
-    ctx.translate(-targetX * 0.02, -targetY * 0.02); // 2% da velocidade da câmera
+    ctx.translate(-targetX * 0.02, -targetY * 0.02); 
     stars.forEach(star => { 
         ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`; 
         ctx.beginPath(); 
@@ -475,7 +474,7 @@ function gameLoop() {
 
     if (gameState === "VOO") {
         fundsText.innerHTML = `💰 <strong>Caixa:</strong> R$ ${agencyFunds.toLocaleString()}`;
-        fuelText.innerHTML = ` <strong>Combustível:</strong> <span style="color:${rocket.currentFuel < 200 ? "#e7471d" : "#a2d149"}">${Math.floor(rocket.currentFuel)}</span> / ${rocket.maxFuel} kg`;
+        fuelText.innerHTML = `⛽ <strong>Combustível:</strong> <span style="color:${rocket.currentFuel < 200 ? "#e7471d" : "#a2d149"}">${Math.floor(rocket.currentFuel)}</span> / ${rocket.maxFuel} kg`;
         if (isPaused) planText.innerHTML = `⚙️ <strong>Planejado (ΔV):</strong> ${plannedDeltaV.toFixed(2)} m/s<br>⏱️ <strong>Tempo:</strong> +${Math.floor(maneuverTime / 10)}s`;
         
         drawTrajectory();
@@ -505,6 +504,9 @@ function gameLoop() {
             }
         }
         
+        // ===================================
+        // DESENHANDO A NAVE E O FOGO
+        // ===================================
         ctx.save();
         ctx.translate(rocket.x, rocket.y); ctx.rotate(rocket.angle);
         if ((isBurningPrograde || isBurningRetrograde) && rocket.currentFuel > 0 && !isPaused) {
