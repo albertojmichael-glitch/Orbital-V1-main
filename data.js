@@ -20,7 +20,7 @@ export let selectedFuel = catalog.fuels[0];
 export let selectedContract = contracts[0]; 
 export let contractCompleted = false;
 
-// Funções para alterar os dados (Setters)
+// Setters to safely modify imported variables
 export function addFunds(amount) {
     agencyFunds += amount;
 }
@@ -29,7 +29,6 @@ export function setContractCompleted(status) {
     contractCompleted = status;
 }
 
-// Funções para salvar as escolhas do jogador no Hangar
 export function setSelectedParts(engine, tank, fuel, contract) {
     selectedEngine = engine;
     selectedTank = tank;
