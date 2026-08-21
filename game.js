@@ -317,30 +317,48 @@ btnFocus.addEventListener('click', () => {
 // ============================================================
 function applyPhysics(x, y, vx, vy, moonX, moonY, dt) {
     let ax = 0, ay = 0;
-    const dxE = EARTH_X - x, dyE = EARTH_Y - y; const distSqE = dxE * dxE + dyE * dyE; const distE = Math.sqrt(distSqE);
     
-    // Gravidade da Terra
-    if (distE > EARTH_RADIUS) { 
-        ax += (G * EARTH_MASS / distSqE) * (dxE / distE); 
-        ay += (G * EARTH_MASS / distSqE) * (dyE / distE); 
+    // Gravidade da Terra (Sempre ativa)
+    const dxE = EARTH_X - x, dyE = EARTH_Y - y;
+    const distSqE = dxE * dxE + dyE * dyE;
+    const distE = Math.sqrt(distSqE);
+    if (distE > EARTH_RADIUS) {
+        ax += (G * EARTH_MASS / distSqE) * (dxE / distE);
+        ay += (G * EARTH_MASS / distSqE) * (dyE / distE);
     }
     
-    // Aerobraking (Arrasto Atmosférico)
+    // Arrasto Atmosférico (Aerobraking)
     if (distE > EARTH_RADIUS && distE < EARTH_RADIUS + ATMOSPHERE_HEIGHT) {
-        const speed = Math.sqrt(vx*vx + vy*vy);
-        const depth = 1 - ((distE - EARTH_RADIUS) / ATMOSPHERE_HEIGHT); // Quanto mais fundo, mais forte
-        const drag = 0.015 * depth * speed * speed; 
-        if (speed > 0) { ax -= (vx / speed) * drag; ay -= (vy / speed) * drag; }
+        const altitude = distE - EARTH_RADIUS;
+        const rho = 1.225 * Math.exp(-altitude / 50); // Modelo exponencial de densidade
+        const vSq = vx * vx + vy * vy;
+        const v = Math.sqrt(vSq);
+        if (v > 0) {
+            const drag = 0.5 * rho * vSq * 0.25 * 5; // Força de arrasto
+            ax -= (vx / v) * drag;
+            ay -= (vy / v) * drag;
+        }
     }
 
-    // Gravidade da Lua
-    const dxM = moonX - x, dyM = moonY - y; const distSqM = dxM * dxM + dyM * dyM; const distM = Math.sqrt(distSqM);
-    if (distM > MOON_RADIUS && distM < MOON_SOI) { 
-        ax += (G * MOON_MASS / distSqM) * (dxM / distM); 
-        ay += (G * MOON_MASS / distSqM) * (dyM / distM); 
+    // Gravidade da Lua (Sem corte abrupto)
+    const dxM = moonX - x, dyM = moonY - y;
+    const distSqM = dxM * dxM + dyM * dyM;
+    const distM = Math.sqrt(distSqM);
+    if (distM > MOON_RADIUS) {
+        ax += (G * MOON_MASS / distSqM) * (dxM / distM);
+        ay += (G * MOON_MASS / distSqM) * (dyM / distM);
     }
 
-    return { x: x + (vx + ax * dt) * dt, y: y + (vy + ay * dt) * dt, vx: vx + ax * dt, vy: vy + ay * dt };
+    // Euler Semi-Implícito (Estabiliza a órbita)
+    const newVx = vx + ax * dt;
+    const newVy = vy + ay * dt;
+    
+    return { 
+        x: x + newVx * dt, 
+        y: y + newVy * dt, 
+        vx: newVx, 
+        vy: newVy 
+    };
 }
 
 // ============================================================
@@ -440,19 +458,37 @@ function drawTrajectory() {
 
 function applyEngine(dt) {
     if (rocket.currentFuel <= 0) return;
+    
+    // I_sp simula a eficiência real
+    const ispe = selectedEngine.name.includes("Titã") ? 350 : 300; 
+    const g0 = 9.81;
+    const massFlow = selectedEngine.thrust / (g0 * ispe); 
+
     if (isPaused) {
-        // Reduzido para dar um controle cirúrgico!
         if (isBurningPrograde) plannedDeltaV += selectedEngine.thrust * dt * 0.05; 
         if (isBurningRetrograde) plannedDeltaV -= selectedEngine.thrust * dt * 0.05;
         if (isMovingNodeFwd) maneuverTime = Math.min(4900, maneuverTime + 3.0); 
         if (isMovingNodeBwd) maneuverTime = Math.max(0, maneuverTime - 3.0);
         return; 
     }
+
     if (!isBurningPrograde && !isBurningRetrograde) return;
-    const speed = Math.sqrt(rocket.vx**2 + rocket.vy**2); if (speed <= 0) return;
+    
+    const speed = Math.sqrt(rocket.vx**2 + rocket.vy**2); 
+    if (speed <= 0) return;
     const dirX = rocket.vx / speed, dirY = rocket.vy / speed;
-    if (isBurningPrograde) { rocket.vx += dirX * selectedEngine.thrust * dt; rocket.vy += dirY * selectedEngine.thrust * dt; rocket.currentFuel -= selectedEngine.thrust * selectedFuel.efficiency * dt; }
-    if (isBurningRetrograde) { rocket.vx -= dirX * selectedEngine.thrust * dt; rocket.vy -= dirY * selectedEngine.thrust * dt; rocket.currentFuel -= selectedEngine.thrust * selectedFuel.efficiency * dt; }
+    
+    if (isBurningPrograde) { 
+        rocket.vx += dirX * selectedEngine.thrust * dt; 
+        rocket.vy += dirY * selectedEngine.thrust * dt; 
+    }
+    if (isBurningRetrograde) { 
+        rocket.vx -= dirX * selectedEngine.thrust * dt; 
+        rocket.vy -= dirY * selectedEngine.thrust * dt; 
+    }
+    
+    // Consumo baseado no fluxo de massa
+    rocket.currentFuel -= massFlow * selectedEngine.thrust * dt * 1000; 
     if (rocket.currentFuel < 0) rocket.currentFuel = 0;
 }
 
