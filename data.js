@@ -1,3 +1,4 @@
+// data.js
 export let agencyFunds = 100000; 
 
 export const catalog = {
@@ -19,10 +20,19 @@ export let selectedFuel = catalog.fuels[0];
 export let selectedContract = contracts[0]; 
 export let contractCompleted = false;
 
-// Função para exportar modificação de dinheiro (necessário em módulos)
+// Funções para alterar os dados (Setters)
 export function addFunds(amount) {
     agencyFunds += amount;
 }
-export function completeContract() {
-    contractCompleted = true;
+
+export function setContractCompleted(status) {
+    contractCompleted = status;
+}
+
+// Funções para salvar as escolhas do jogador no Hangar
+export function setSelectedParts(engine, tank, fuel, contract) {
+    selectedEngine = engine;
+    selectedTank = tank;
+    selectedFuel = fuel;
+    selectedContract = contract;
 }

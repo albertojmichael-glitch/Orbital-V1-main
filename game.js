@@ -1,7 +1,11 @@
 const canvas = document.createElement('canvas');
 document.body.appendChild(canvas);
 const ctx = canvas.getContext('2d');
-import { agencyFunds, catalog, contracts, selectedEngine, selectedTank, selectedFuel, selectedContract, contractCompleted, addFunds, completeContract } from './data.js';
+import { 
+    agencyFunds, catalog, contracts, 
+    selectedEngine, selectedTank, selectedFuel, selectedContract, contractCompleted, 
+    addFunds, setContractCompleted, setSelectedParts 
+} from './data.js';
 
 // ============================================================
 // CARREGAMENTO DE IMAGENS
@@ -125,30 +129,47 @@ const engineSelect = document.getElementById('engineSelect'); const tankSelect =
 const totalCostDiv = document.getElementById('totalCost'); const assemblyFundsDiv = document.getElementById('assemblyFunds'); const contractDesc = document.getElementById('contractDesc');
 
 function updateAssemblyUI() {
-    selectedEngine = catalog.engines[parseInt(engineSelect.value)]; selectedTank = catalog.tanks[parseInt(tankSelect.value)];
-    selectedFuel = catalog.fuels[parseInt(fuelSelect.value)]; selectedContract = contracts[parseInt(contractSelect.value)];
-    const rocketCost = selectedEngine.cost + selectedTank.cost + selectedFuel.cost; const finalCost = rocketCost - selectedContract.advance; 
+    // Usando a função do data.js para salvar as escolhas
+    setSelectedParts(
+        catalog.engines[parseInt(engineSelect.value)],
+        catalog.tanks[parseInt(tankSelect.value)],
+        catalog.fuels[parseInt(fuelSelect.value)],
+        contracts[parseInt(contractSelect.value)]
+    );
+
+    const rocketCost = selectedEngine.cost + selectedTank.cost + selectedFuel.cost; 
+    const finalCost = rocketCost - selectedContract.advance; 
+    
     if (contractDesc) contractDesc.innerHTML = `<strong>Objetivo:</strong> ${selectedContract.desc}<br><span style="color:#a2d149;">Adiantamento: R$ ${selectedContract.advance.toLocaleString()}</span> | <span style="color:#f6a84b;">Prêmio: R$ ${selectedContract.reward.toLocaleString()}</span>`;
+    
     if (assemblyFundsDiv) assemblyFundsDiv.innerText = `Caixa: R$ ${agencyFunds.toLocaleString()}`;
     if (totalCostDiv) { totalCostDiv.innerHTML = `Custo do Foguete: R$ ${rocketCost.toLocaleString()}<br>Gasto Efetivo: <strong>R$ ${finalCost.toLocaleString()}</strong>`; totalCostDiv.style.color = finalCost > agencyFunds ? "#e7471d" : "#ffffff"; }
 }
+
 engineSelect.addEventListener('change', updateAssemblyUI); tankSelect.addEventListener('change', updateAssemblyUI); fuelSelect.addEventListener('change', updateAssemblyUI); contractSelect.addEventListener('change', updateAssemblyUI);
 
 document.getElementById('btnLaunch')?.addEventListener('click', () => {
     const finalCost = (selectedEngine.cost + selectedTank.cost + selectedFuel.cost) - selectedContract.advance;
     if (agencyFunds >= finalCost) {
-        agencyFunds -= finalCost; 
+        addFunds(-finalCost) 
         
         launchAlt = 0; launchX = 0; launchVx = 0; launchVy = 0; launchAngle = -Math.PI / 2; launchFuel = selectedTank.fuel;
         rocket.maxFuel = selectedTank.fuel;
-        contractCompleted = false;
+        setContractCompleted(false);
         
         assemblyScreen.style.display = "none"; 
         gameState = "LAUNCH";
     } else alert("Sem fundos suficientes!");
 });
 
-function completeContract() { contractCompleted = true; agencyFunds += selectedContract.reward; missionText.innerHTML = `✅ <strong>Missão Concluída!</strong> (+ R$ ${selectedContract.reward.toLocaleString()})`; missionText.style.color = "#a2d149"; }
+function completeContract() { 
+    setContractCompleted(true); // Muda o dado usando a função do data.js
+    addFunds(selectedContract.reward); // Adiciona o dinheiro usando a função do data.js
+    
+    // Atualiza a tela (Isso fica no game.js mesmo)
+    missionText.innerHTML = `✅ <strong>Missão Concluída!</strong> (+ R$ ${selectedContract.reward.toLocaleString()})`; 
+    missionText.style.color = "#a2d149"; 
+}
 
 const resultScreen = document.createElement('div');
 resultScreen.style.cssText = "position:absolute; top:0; left:0; width:100%; height:100%; display:none; flex-direction:column; justify-content:center; align-items:center; background:rgba(11,12,16,0.95); color:white; z-index:200; text-align:center;";
