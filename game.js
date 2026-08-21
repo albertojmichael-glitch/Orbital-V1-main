@@ -33,8 +33,8 @@ let gameState = "MENU";
 
 const catalog = {
     engines: [
-        { name: "Motor Básico", thrust: 0.10, cost: 40000 },
-        { name: "Motor Titã", thrust: 0.25, cost: 120000 }
+        { name: "Motor Básico", thrust: 1.5, cost: 40000 },
+        { name: "Motor Titã", thrust: 3.0, cost: 120000 }
     ],
     tanks: [
         { name: "Tanque Pequeno (500kg)", fuel: 500, cost: 15000 },
