@@ -26,18 +26,18 @@ for (let i = 0; i < 800; i++) {
 }
 
 // ============================================================
-// FÍSICA CORRIGIDA (LEIS DE KEPLER)
+// FÍSICA E MECÂNICA ORBITAL AVANÇADA
 // ============================================================
 const PHYSICS_DT = 0.02; 
 const G = 0.5;
 const EARTH_MASS = 8000; 
 const EARTH_RADIUS = 40; 
+const ATMOSPHERE_HEIGHT = 15; // Nova camada de arrasto!
 const EARTH_X = 0; const EARTH_Y = 0;
 
 const MOON_MASS = 150; 
 const MOON_RADIUS = 15; 
 const MOON_ORBIT_DISTANCE = 1200; 
-// Agora a Lua usa as Leis da Astrofísica para manter uma órbita estável!
 const MOON_ORBIT_SPEED = Math.sqrt((G * EARTH_MASS) / Math.pow(MOON_ORBIT_DISTANCE, 3)); 
 const MOON_SOI = 250; 
 
@@ -53,7 +53,7 @@ let rocket = { x: 0, y: 0, vx: 0, vy: 0, maxFuel: 0, currentFuel: 0, angle: -Mat
 // ============================================================
 // DADOS DA AGÊNCIA, LOJA E CONTRATOS
 // ============================================================
-let agencyFunds = 10000000; 
+let agencyFunds = 100000; 
 let gameState = "MENU"; 
 
 const catalog = {
@@ -85,13 +85,13 @@ let selectedContract = contracts[0];
 let contractCompleted = false;
 
 // ============================================================
-// CRIAÇÃO DAS TELAS
+// CRIAÇÃO DAS TELAS E HUD
 // ============================================================
 const menuScreen = document.createElement('div');
 menuScreen.style.cssText = "position:absolute; top:0; left:0; width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; background:rgba(11,12,16,0.8); color:white; z-index:100;";
 menuScreen.innerHTML = `
     <h1 style="font-size: 60px; margin-bottom: 10px; color: #4b7cf6;">ORBITAL</h1>
-    <p style="font-size: 20px; margin-bottom: 40px; color: #aaaaaa;">Modo Carreira</p>
+    <p style="font-size: 20px; margin-bottom: 40px; color: #aaaaaa;">Modo Carreira Avançado</p>
     <button id="btnStart" style="padding: 15px 40px; font-size: 20px; font-weight: bold; cursor: pointer; border-radius: 8px; border: none; background: #a2d149; color: white;">ENTRAR NO HANGAR</button>
 `;
 document.body.appendChild(menuScreen);
@@ -101,7 +101,6 @@ assemblyScreen.style.cssText = "position:absolute; top:0; left:0; width:100%; he
 assemblyScreen.innerHTML = `
     <h2 style="font-size: 35px; margin-bottom: 10px;">Hangar de Montagem</h2>
     <div id="assemblyFunds" style="font-size: 22px; color: #a2d149; margin-bottom: 20px; font-weight:bold;">Caixa da Agência: R$ 100.000</div>
-    
     <div style="background:#13161d; padding: 20px; border-radius: 10px; text-align:center; width: 80%; max-width: 700px; margin-bottom: 20px; border: 1px solid #4b7cf6;">
         <h3 style="color: #4b7cf6; margin-top:0;">📋 Quadro de Contratos</h3>
         <select id="contractSelect" style="padding: 10px; font-size: 16px; margin-top: 10px; border-radius: 5px; width: 80%; background: #0b0c10; color: white; border: 1px solid #3a4a5c;">
@@ -109,7 +108,6 @@ assemblyScreen.innerHTML = `
         </select>
         <p id="contractDesc" style="color:#aaaaaa; margin-top: 15px; font-size: 15px;"></p>
     </div>
-
     <div style="display:flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap; justify-content: center;">
         <div style="background:#1c202a; padding: 15px; border-radius: 10px; text-align:center;">
             <h3>Motor</h3>
@@ -130,17 +128,13 @@ assemblyScreen.innerHTML = `
             </select>
         </div>
     </div>
-    
     <div id="totalCost" style="font-size: 20px; margin-bottom: 20px; color: #f6a84b; background:#1c202a; padding: 15px; border-radius: 10px;">Cálculo do Lançamento...</div>
     <button id="btnLaunch" style="padding: 15px 40px; font-size: 20px; font-weight: bold; cursor: pointer; border-radius: 8px; border: none; background: #e7471d; color: white;">🚀 LANÇAR FOGUETE</button>
 `;
 document.body.appendChild(assemblyScreen);
 
-// ============================================================
-// HUD DE VOO
-// ============================================================
 const hudContainer = document.createElement('div');
-hudContainer.style.cssText = "position:absolute; top:20px; left:20px; color:white; font-size:16px; background:rgba(0,0,0,0.7); padding:15px; border-radius:8px; border:1px solid #3a4a5c; display:none;";
+hudContainer.style.cssText = "position:absolute; top:20px; left:20px; color:white; font-size:16px; background:rgba(0,0,0,0.7); padding:15px; border-radius:8px; border:1px solid #3a4a5c; display:none; pointer-events:none;";
 const fundsText = document.createElement('div');
 const fuelText = document.createElement('div');
 const speedText = document.createElement('div'); speedText.style.cssText = "color: #f6a84b; margin-top: 5px; font-weight: bold;";
@@ -179,69 +173,52 @@ const btnFocus = createButton("📷 Foco: Terra", "#3a4a5c");
 btnNodePrev.style.display = "none"; btnNodeNext.style.display = "none"; btnExecute.style.display = "none"; 
 
 // ============================================================
-// LÓGICA DE MENUS E CONTRATOS
+// LÓGICA DE MENUS
 // ============================================================
 document.getElementById('btnStart')?.addEventListener('click', () => {
     menuScreen.style.display = "none"; assemblyScreen.style.display = "flex"; updateAssemblyUI();
 });
 
-const engineSelect = document.getElementById('engineSelect');
-const tankSelect = document.getElementById('tankSelect');
-const fuelSelect = document.getElementById('fuelSelect');
-const contractSelect = document.getElementById('contractSelect');
-const totalCostDiv = document.getElementById('totalCost');
-const assemblyFundsDiv = document.getElementById('assemblyFunds');
-const contractDesc = document.getElementById('contractDesc');
+const engineSelect = document.getElementById('engineSelect'); const tankSelect = document.getElementById('tankSelect');
+const fuelSelect = document.getElementById('fuelSelect'); const contractSelect = document.getElementById('contractSelect');
+const totalCostDiv = document.getElementById('totalCost'); const assemblyFundsDiv = document.getElementById('assemblyFunds'); const contractDesc = document.getElementById('contractDesc');
 
 function updateAssemblyUI() {
-    selectedEngine = catalog.engines[parseInt(engineSelect.value)];
-    selectedTank = catalog.tanks[parseInt(tankSelect.value)];
-    selectedFuel = catalog.fuels[parseInt(fuelSelect.value)];
-    selectedContract = contracts[parseInt(contractSelect.value)];
-    
+    selectedEngine = catalog.engines[parseInt(engineSelect.value)]; selectedTank = catalog.tanks[parseInt(tankSelect.value)];
+    selectedFuel = catalog.fuels[parseInt(fuelSelect.value)]; selectedContract = contracts[parseInt(contractSelect.value)];
     const rocketCost = selectedEngine.cost + selectedTank.cost + selectedFuel.cost;
     const finalCost = rocketCost - selectedContract.advance; 
-    
     if (contractDesc) contractDesc.innerHTML = `<strong>Objetivo:</strong> ${selectedContract.desc}<br><br><span style="color:#a2d149;">Adiantamento: R$ ${selectedContract.advance.toLocaleString()}</span> | <span style="color:#f6a84b;">Prêmio: R$ ${selectedContract.reward.toLocaleString()}</span>`;
-    
     if (assemblyFundsDiv) assemblyFundsDiv.innerText = `Caixa da Agência: R$ ${agencyFunds.toLocaleString()}`;
     if (totalCostDiv) {
-        totalCostDiv.innerHTML = `Custo do Foguete: R$ ${rocketCost.toLocaleString()}<br>Gasto Efetivo (Com Adiantamento): <strong>R$ ${finalCost.toLocaleString()}</strong>`;
+        totalCostDiv.innerHTML = `Custo do Foguete: R$ ${rocketCost.toLocaleString()}<br>Gasto Efetivo: <strong>R$ ${finalCost.toLocaleString()}</strong>`;
         totalCostDiv.style.color = finalCost > agencyFunds ? "#e7471d" : "#ffffff";
     }
 }
-
-engineSelect.addEventListener('change', updateAssemblyUI); tankSelect.addEventListener('change', updateAssemblyUI);
-fuelSelect.addEventListener('change', updateAssemblyUI); contractSelect.addEventListener('change', updateAssemblyUI);
+engineSelect.addEventListener('change', updateAssemblyUI); tankSelect.addEventListener('change', updateAssemblyUI); fuelSelect.addEventListener('change', updateAssemblyUI); contractSelect.addEventListener('change', updateAssemblyUI);
 
 document.getElementById('btnLaunch')?.addEventListener('click', () => {
     const rocketCost = selectedEngine.cost + selectedTank.cost + selectedFuel.cost;
     const finalCost = rocketCost - selectedContract.advance;
-    
     if (agencyFunds >= finalCost) {
         agencyFunds -= finalCost; 
         rocket.maxFuel = selectedTank.fuel; rocket.currentFuel = selectedTank.fuel;
         rocket.x = EARTH_X; rocket.y = EARTH_Y - INITIAL_ORBIT_RADIUS;
         rocket.vx = INITIAL_ORBIT_SPEED; rocket.vy = 0; rocket.angle = -Math.PI / 2; 
-        
         contractCompleted = false;
-        missionText.innerHTML = `📋 <strong>Missão:</strong> ${selectedContract.name}`;
-        missionText.style.color = "#aaaaaa";
-        
+        missionText.innerHTML = `📋 <strong>Missão:</strong> ${selectedContract.name}`; missionText.style.color = "#aaaaaa";
         assemblyScreen.style.display = "none"; hudContainer.style.display = "block"; uiContainer.style.display = "flex";
         gameState = "VOO";
-    } else alert("A Agência não tem fundos suficientes para este lançamento!");
+    } else alert("Sem fundos suficientes!");
 });
 
 function completeContract() {
-    contractCompleted = true;
-    agencyFunds += selectedContract.reward;
-    missionText.innerHTML = `✅ <strong>Missão Concluída!</strong> (+ R$ ${selectedContract.reward.toLocaleString()})`;
-    missionText.style.color = "#a2d149";
+    contractCompleted = true; agencyFunds += selectedContract.reward;
+    missionText.innerHTML = `✅ <strong>Missão Concluída!</strong> (+ R$ ${selectedContract.reward.toLocaleString()})`; missionText.style.color = "#a2d149";
 }
 
 // ============================================================
-// TELA DE RESULTADO
+// TELA DE RESULTADOS
 // ============================================================
 const resultScreen = document.createElement('div');
 resultScreen.style.cssText = "position:absolute; top:0; left:0; width:100%; height:100%; display:none; flex-direction:column; justify-content:center; align-items:center; background:rgba(11,12,16,0.95); color:white; z-index:200; text-align:center;";
@@ -249,21 +226,17 @@ const resultTitle = document.createElement('h1'); resultTitle.style.fontSize = "
 const resultMessage = document.createElement('p'); resultMessage.style.fontSize = "22px"; resultMessage.style.marginBottom = "40px"; resultMessage.style.whiteSpace = "pre-line";
 const btnReturn = document.createElement('button'); btnReturn.innerText = "VOLTAR AO HANGAR"; btnReturn.style.cssText = "padding: 15px 40px; font-size: 20px; font-weight: bold; cursor: pointer; border-radius: 8px; border: none; background: #3a4a5c; color: white;";
 resultScreen.append(resultTitle, resultMessage, btnReturn); document.body.appendChild(resultScreen);
-
 btnReturn.addEventListener('click', () => { resultScreen.style.display = "none"; assemblyScreen.style.display = "flex"; updateAssemblyUI(); gameState = "MONTAGEM"; });
 
 const MAX_SAFE_LANDING_SPEED = 2.0; 
-
 function endMission(target, impactSpeed) {
     gameState = "RESULT"; hudContainer.style.display = "none"; uiContainer.style.display = "none"; resultScreen.style.display = "flex";
     isBurningPrograde = false; isBurningRetrograde = false; isPaused = false;
-    
     if (impactSpeed <= MAX_SAFE_LANDING_SPEED) {
         resultTitle.innerText = "POUSO BEM SUCEDIDO! 🏆"; resultTitle.style.color = "#a2d149";
         if (target === "LUA" && selectedContract.id === "LAND" && !contractCompleted) completeContract();
         let recov = target === "LUA" ? 0 : 15000;
         if(recov > 0) agencyFunds += recov;
-
         resultMessage.innerHTML = `Pouso suave na ${target} a ${impactSpeed.toFixed(2)} m/s.<br>`;
         if (recov > 0) resultMessage.innerHTML += `Recuperação de peças: +R$ ${recov.toLocaleString()}<br>`;
         if (contractCompleted) resultMessage.innerHTML += `<br><span style="color:#a2d149;">Contrato Cumprido: +R$ ${selectedContract.reward.toLocaleString()}</span>`;
@@ -274,7 +247,7 @@ function endMission(target, impactSpeed) {
 }
 
 // ============================================================
-// SISTEMA DE PLANEJAMENTO
+// CONTROLES DE VOO
 // ============================================================
 let cameraZoom = 1.0; let cameraTarget = "EARTH"; let isPaused = false;
 let plannedDeltaV = 0; let maneuverTime = 0; 
@@ -301,12 +274,11 @@ btnExecute.addEventListener('click', () => {
         moonAngle += MOON_ORBIT_SPEED * PREDICT_DT;
         const simMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
         const simMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
-        const result = applyGravity(rocket.x, rocket.y, rocket.vx, rocket.vy, simMoonX, simMoonY, PREDICT_DT);
+        const result = applyPhysics(rocket.x, rocket.y, rocket.vx, rocket.vy, simMoonX, simMoonY, PREDICT_DT);
         rocket.x = result.x; rocket.y = result.y; rocket.vx = result.vx; rocket.vy = result.vy;
         
         let mVx = -Math.sin(moonAngle) * MOON_ORBIT_DISTANCE * MOON_ORBIT_SPEED;
         let mVy = Math.cos(moonAngle) * MOON_ORBIT_DISTANCE * MOON_ORBIT_SPEED;
-
         if (Math.sqrt((rocket.x - EARTH_X)**2 + (rocket.y - EARTH_Y)**2) <= EARTH_RADIUS) {
             endMission("TERRA", Math.sqrt(rocket.vx**2 + rocket.vy**2)); crashed = true; break;
         }
@@ -315,7 +287,6 @@ btnExecute.addEventListener('click', () => {
             endMission("LUA", relSpeed); crashed = true; break;
         }
     }
-    
     if (!crashed) {
         const speed = Math.sqrt(rocket.vx**2 + rocket.vy**2);
         if (speed > 0) { rocket.vx += (rocket.vx / speed) * plannedDeltaV; rocket.vy += (rocket.vy / speed) * plannedDeltaV; }
@@ -334,42 +305,66 @@ btnRetrograde.addEventListener('mousedown', startEv('isBurningRetrograde')); btn
 btnNodeNext.addEventListener('mousedown', startEv('isMovingNodeFwd')); btnNodeNext.addEventListener('mouseup', stopEv('isMovingNodeFwd')); btnNodeNext.addEventListener('mouseleave', stopEv('isMovingNodeFwd'));
 btnNodePrev.addEventListener('mousedown', startEv('isMovingNodeBwd')); btnNodePrev.addEventListener('mouseup', stopEv('isMovingNodeBwd')); btnNodePrev.addEventListener('mouseleave', stopEv('isMovingNodeBwd'));
 
-window.addEventListener('wheel', (e) => { if(gameState !== "VOO") return; cameraZoom += e.deltaY * -0.001; cameraZoom = Math.min(Math.max(0.2, cameraZoom), 4.0); });
+window.addEventListener('wheel', (e) => { if(gameState !== "VOO") return; cameraZoom += e.deltaY * -0.001; cameraZoom = Math.min(Math.max(0.1, cameraZoom), 4.0); });
 btnFocus.addEventListener('click', () => {
     if (cameraTarget === "EARTH") { cameraTarget = "ROCKET"; btnFocus.innerText = "📷 Foco: Foguete"; }
     else if (cameraTarget === "ROCKET") { cameraTarget = "MOON"; btnFocus.innerText = "📷 Foco: Lua"; }
     else { cameraTarget = "EARTH"; btnFocus.innerText = "📷 Foco: Terra"; }
 });
 
-
-function applyGravity(x, y, vx, vy, moonX, moonY, dt) {
+// ============================================================
+// O CORAÇÃO DA FÍSICA E ARRASTO ATMOSFÉRICO
+// ============================================================
+function applyPhysics(x, y, vx, vy, moonX, moonY, dt) {
     let ax = 0, ay = 0;
     const dxE = EARTH_X - x, dyE = EARTH_Y - y; const distSqE = dxE * dxE + dyE * dyE; const distE = Math.sqrt(distSqE);
-    if (distE > EARTH_RADIUS) { ax += (G * EARTH_MASS / distSqE) * (dxE / distE); ay += (G * EARTH_MASS / distSqE) * (dyE / distE); }
+    
+    // Gravidade da Terra
+    if (distE > EARTH_RADIUS) { 
+        ax += (G * EARTH_MASS / distSqE) * (dxE / distE); 
+        ay += (G * EARTH_MASS / distSqE) * (dyE / distE); 
+    }
+    
+    // Aerobraking (Arrasto Atmosférico)
+    if (distE > EARTH_RADIUS && distE < EARTH_RADIUS + ATMOSPHERE_HEIGHT) {
+        const speed = Math.sqrt(vx*vx + vy*vy);
+        const depth = 1 - ((distE - EARTH_RADIUS) / ATMOSPHERE_HEIGHT); // Quanto mais fundo, mais forte
+        const drag = 0.015 * depth * speed * speed; 
+        if (speed > 0) { ax -= (vx / speed) * drag; ay -= (vy / speed) * drag; }
+    }
+
+    // Gravidade da Lua
     const dxM = moonX - x, dyM = moonY - y; const distSqM = dxM * dxM + dyM * dyM; const distM = Math.sqrt(distSqM);
-    if (distM > MOON_RADIUS && distM < MOON_SOI) { ax += (G * MOON_MASS / distSqM) * (dxM / distM); ay += (G * MOON_MASS / distSqM) * (dyM / distM); }
+    if (distM > MOON_RADIUS && distM < MOON_SOI) { 
+        ax += (G * MOON_MASS / distSqM) * (dxM / distM); 
+        ay += (G * MOON_MASS / distSqM) * (dyM / distM); 
+    }
+
     return { x: x + (vx + ax * dt) * dt, y: y + (vy + ay * dt) * dt, vx: vx + ax * dt, vy: vy + ay * dt };
 }
 
+// ============================================================
+// PREVISÃO COM APOGEU, PERIGEU E ZONA DE IMPACTO
+// ============================================================
 function drawTrajectory() {
     let simX = rocket.x, simY = rocket.y, simVx = rocket.vx, simVy = rocket.vy, simMoonAngle = moonAngle;
     const PREDICT_DT = PHYSICS_DT * 6;
-    const PREDICT_LIMIT = 6000; // Limite expandido para prever mais longe!
+    const PREDICT_LIMIT = 5000; 
+
+    const currentMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
+    const currentMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
 
     ctx.strokeStyle = "rgba(255, 255, 255, 0.4)"; ctx.lineWidth = 1.5 / cameraZoom; ctx.beginPath(); 
     
     let startDrawX = simX, startDrawY = simY;
-    if (cameraTarget === "MOON") {
-        startDrawX = currentMoonX + (simX - currentMoonX);
-        startDrawY = currentMoonY + (simY - currentMoonY);
-    }
+    if (cameraTarget === "MOON") { startDrawX = currentMoonX + (simX - currentMoonX); startDrawY = currentMoonY + (simY - currentMoonY); }
     ctx.moveTo(startDrawX, startDrawY);
 
     for (let i = 0; i < maneuverTime; i++) {
         simMoonAngle += MOON_ORBIT_SPEED * PREDICT_DT; 
         const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE; 
         const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
-        const result = applyGravity(simX, simY, simVx, simVy, simMoonX, simMoonY, PREDICT_DT); 
+        const result = applyPhysics(simX, simY, simVx, simVy, simMoonX, simMoonY, PREDICT_DT); 
         simX = result.x; simY = result.y; simVx = result.vx; simVy = result.vy;
         
         if (i % 5 === 0) {
@@ -402,32 +397,54 @@ function drawTrajectory() {
     }
     ctx.moveTo(resumeDrawX, resumeDrawY);
 
+    let periapsis = { d: Infinity, x: 0, y: 0 }; let apoapsis = { d: 0, x: 0, y: 0 };
+    let crashed = false; let crashX = 0, crashY = 0;
+
     for (let i = 0; i < PREDICT_LIMIT - maneuverTime; i++) {
         simMoonAngle += MOON_ORBIT_SPEED * PREDICT_DT; 
         const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE; 
         const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
-        const result = applyGravity(simX, simY, simVx, simVy, simMoonX, simMoonY, PREDICT_DT); 
+        const result = applyPhysics(simX, simY, simVx, simVy, simMoonX, simMoonY, PREDICT_DT); 
         simX = result.x; simY = result.y; simVx = result.vx; simVy = result.vy;
         
-        if (Math.sqrt((simX - EARTH_X)**2 + (simY - EARTH_Y)**2) <= EARTH_RADIUS) break; 
-        if (Math.sqrt((simX - simMoonX)**2 + (simY - simMoonY)**2) <= MOON_RADIUS) break;
+        let drawX = simX, drawY = simY;
+        let focusDist = Math.sqrt((simX - EARTH_X)**2 + (simY - EARTH_Y)**2);
         
-        if (i % 5 === 0) {
-            let drawX = simX, drawY = simY;
-            if (cameraTarget === "MOON") { drawX = currentMoonX + (simX - simMoonX); drawY = currentMoonY + (simY - simMoonY); }
-            ctx.lineTo(drawX, drawY);
+        if (cameraTarget === "MOON") { 
+            drawX = currentMoonX + (simX - simMoonX); drawY = currentMoonY + (simY - simMoonY); 
+            focusDist = Math.sqrt((simX - simMoonX)**2 + (simY - simMoonY)**2);
         }
+
+        if (focusDist < periapsis.d) periapsis = { d: focusDist, x: drawX, y: drawY };
+        if (focusDist > apoapsis.d && focusDist < MOON_SOI * 1.5) apoapsis = { d: focusDist, x: drawX, y: drawY };
+
+        if (Math.sqrt((simX - EARTH_X)**2 + (simY - EARTH_Y)**2) <= EARTH_RADIUS || Math.sqrt((simX - simMoonX)**2 + (simY - simMoonY)**2) <= MOON_RADIUS) {
+            crashed = true; crashX = drawX; crashY = drawY; break; 
+        }
+        
+        if (i % 5 === 0) ctx.lineTo(drawX, drawY);
     }
+    
+    if (crashed) ctx.strokeStyle = "#e7471d"; // Fica vermelho se for bater
     ctx.stroke();
+
+    // Desenha Indicadores
+    ctx.font = (12/cameraZoom) + "px Arial"; ctx.textAlign = "center";
+    if (crashed) {
+        ctx.fillStyle = "#e7471d"; ctx.fillText("💥", crashX, crashY - 10/cameraZoom);
+    } else {
+        if (periapsis.d !== Infinity) { ctx.fillStyle = "#a2d149"; ctx.fillText("Pe", periapsis.x, periapsis.y - 8/cameraZoom); }
+        if (apoapsis.d > 0) { ctx.fillStyle = "#4b7cf6"; ctx.fillText("Ap", apoapsis.x, apoapsis.y - 8/cameraZoom); }
+    }
 }
 
 function applyEngine(dt) {
     if (rocket.currentFuel <= 0) return;
     if (isPaused) {
-        // Reduzido para dar um controle cirúrgico para você poder mirar exatamente na órbita!
+        // Reduzido para dar um controle cirúrgico!
         if (isBurningPrograde) plannedDeltaV += selectedEngine.thrust * dt * 0.05; 
         if (isBurningRetrograde) plannedDeltaV -= selectedEngine.thrust * dt * 0.05;
-        if (isMovingNodeFwd) maneuverTime = Math.min(5900, maneuverTime + 3.0); 
+        if (isMovingNodeFwd) maneuverTime = Math.min(4900, maneuverTime + 3.0); 
         if (isMovingNodeBwd) maneuverTime = Math.max(0, maneuverTime - 3.0);
         return; 
     }
@@ -445,9 +462,11 @@ function applyEngine(dt) {
 function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (gameState !== "VOO" || isPaused) {
+    // O Fim do Bug da Lua: A Lua só se move no Menu ou se o jogo estiver despausado no Voo
+    if (gameState === "MENU" || (gameState === "VOO" && !isPaused)) {
         moonAngle += MOON_ORBIT_SPEED * PHYSICS_DT * SUBSTEPS;
     }
+    
     currentMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
     currentMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
 
@@ -470,17 +489,16 @@ function gameLoop() {
     ctx.translate(-targetX, -targetY);
 
     if (gameState === "VOO") {
-        
         let mVx = -Math.sin(moonAngle) * MOON_ORBIT_DISTANCE * MOON_ORBIT_SPEED;
         let mVy = Math.cos(moonAngle) * MOON_ORBIT_DISTANCE * MOON_ORBIT_SPEED;
         let displaySpeed = 0;
         
         if (cameraTarget === "MOON") {
             displaySpeed = Math.sqrt((rocket.vx - mVx)**2 + (rocket.vy - mVy)**2);
-            speedText.innerHTML = `🛰️ <strong>Vel. Relativa (Alvo: Lua):</strong> <span style="color:${displaySpeed < 2.0 ? '#a2d149' : '#e7471d'}">${displaySpeed.toFixed(2)} m/s</span>`;
+            speedText.innerHTML = `🛰️ <strong>Vel. Relativa (Lua):</strong> <span style="color:${displaySpeed < 2.0 ? '#a2d149' : '#e7471d'}">${displaySpeed.toFixed(2)} m/s</span>`;
         } else {
             displaySpeed = Math.sqrt(rocket.vx**2 + rocket.vy**2);
-            speedText.innerHTML = `🛰️ <strong>Velocidade (Alvo: Terra):</strong> ${displaySpeed.toFixed(2)} m/s`;
+            speedText.innerHTML = `🛰️ <strong>Velocidade (Terra):</strong> ${displaySpeed.toFixed(2)} m/s`;
         }
 
         fundsText.innerHTML = `💰 <strong>Caixa:</strong> R$ ${agencyFunds.toLocaleString()}`;
@@ -492,11 +510,7 @@ function gameLoop() {
         for (let i = 0; i < SUBSTEPS; i++) {
             applyEngine(PHYSICS_DT);
             if (!isPaused) {
-                moonAngle += MOON_ORBIT_SPEED * PHYSICS_DT;
-                currentMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
-                currentMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
-
-                const result = applyGravity(rocket.x, rocket.y, rocket.vx, rocket.vy, currentMoonX, currentMoonY, PHYSICS_DT);
+                const result = applyPhysics(rocket.x, rocket.y, rocket.vx, rocket.vy, currentMoonX, currentMoonY, PHYSICS_DT);
                 rocket.x = result.x; rocket.y = result.y; rocket.vx = result.vx; rocket.vy = result.vy;
                 
                 const speed = Math.sqrt(rocket.vx**2 + rocket.vy**2);
@@ -535,10 +549,13 @@ function gameLoop() {
     ctx.strokeStyle = "rgba(255,255,255,0.05)"; ctx.beginPath(); ctx.arc(EARTH_X, EARTH_Y, MOON_ORBIT_DISTANCE, 0, Math.PI * 2); ctx.stroke();
     ctx.strokeStyle = "rgba(100,100,255,0.1)"; ctx.beginPath(); ctx.arc(currentMoonX, currentMoonY, MOON_SOI, 0, Math.PI * 2); ctx.stroke();
     
+    // Desenhando a Terra com Atmosfera (Halo Azul Claro)
     ctx.save(); ctx.shadowBlur = 20; ctx.shadowColor = "#4b7cf6";
     const earthGradient = ctx.createRadialGradient(EARTH_X - EARTH_RADIUS*0.3, EARTH_Y - EARTH_RADIUS*0.3, EARTH_RADIUS*0.1, EARTH_X, EARTH_Y, EARTH_RADIUS);
     earthGradient.addColorStop(0, "#85aaff"); earthGradient.addColorStop(0.5, "#4b7cf6"); earthGradient.addColorStop(1, "#0d1b3e");
     ctx.fillStyle = earthGradient; ctx.beginPath(); ctx.arc(EARTH_X, EARTH_Y, EARTH_RADIUS, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    // Halo da Atmosfera
+    ctx.fillStyle = "rgba(133, 170, 255, 0.15)"; ctx.beginPath(); ctx.arc(EARTH_X, EARTH_Y, EARTH_RADIUS + ATMOSPHERE_HEIGHT, 0, Math.PI * 2); ctx.fill();
 
     ctx.save(); const moonGradient = ctx.createRadialGradient(currentMoonX - MOON_RADIUS*0.3, currentMoonY - MOON_RADIUS*0.3, MOON_RADIUS*0.1, currentMoonX, currentMoonY, MOON_RADIUS);
     moonGradient.addColorStop(0, "#ffffff"); moonGradient.addColorStop(0.4, "#aaaaaa"); moonGradient.addColorStop(1, "#222222");
