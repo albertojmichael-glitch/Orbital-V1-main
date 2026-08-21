@@ -15,7 +15,7 @@ document.body.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-seri
 // ============================================================
 // ESTRELAS (STARFIELD COM PARALLAX)
 // ============================================================
-const stars: {x: number, y: number, radius: number, alpha: number}[] = [];
+const stars = [];
 for (let i = 0; i < 800; i++) {
     stars.push({
         x: (Math.random() - 0.5) * 8000,
@@ -53,10 +53,10 @@ const contracts = [
     { id: "LAND", name: "Pouso Lunar", advance: 120000, reward: 350000, desc: "Pouse suavemente na superfície da Lua (Velocidade < 1.0 m/s)." }
 ];
 
-let selectedEngine = catalog.engines[0]!;
-let selectedTank = catalog.tanks[0]!;
-let selectedFuel = catalog.fuels[0]!;
-let selectedContract = contracts[0]!;
+let selectedEngine = catalog.engines[0];
+let selectedTank = catalog.tanks[0];
+let selectedFuel = catalog.fuels[0];
+let selectedContract = contracts[0];
 let contractCompleted = false;
 
 // ============================================================
@@ -127,7 +127,7 @@ const uiContainer = document.createElement('div');
 uiContainer.style.cssText = "position:absolute; bottom:30px; width:100%; display:none; justify-content:center; gap:10px; flex-wrap: wrap;";
 document.body.appendChild(uiContainer);
 
-function createButton(text: string, color: string): HTMLButtonElement {
+function createButton(text, color) {
     const btn = document.createElement('button');
     btn.innerText = text;
     btn.style.padding = "15px 20px";
@@ -159,19 +159,19 @@ document.getElementById('btnStart')?.addEventListener('click', () => {
     menuScreen.style.display = "none"; assemblyScreen.style.display = "flex"; updateAssemblyUI();
 });
 
-const engineSelect = document.getElementById('engineSelect') as HTMLSelectElement;
-const tankSelect = document.getElementById('tankSelect') as HTMLSelectElement;
-const fuelSelect = document.getElementById('fuelSelect') as HTMLSelectElement;
-const contractSelect = document.getElementById('contractSelect') as HTMLSelectElement;
+const engineSelect = document.getElementById('engineSelect');
+const tankSelect = document.getElementById('tankSelect');
+const fuelSelect = document.getElementById('fuelSelect');
+const contractSelect = document.getElementById('contractSelect');
 const totalCostDiv = document.getElementById('totalCost');
 const assemblyFundsDiv = document.getElementById('assemblyFunds');
 const contractDesc = document.getElementById('contractDesc');
 
 function updateAssemblyUI() {
-    selectedEngine = catalog.engines[parseInt(engineSelect.value)]!;
-    selectedTank = catalog.tanks[parseInt(tankSelect.value)]!;
-    selectedFuel = catalog.fuels[parseInt(fuelSelect.value)]!;
-    selectedContract = contracts[parseInt(contractSelect.value)]!;
+    selectedEngine = catalog.engines[parseInt(engineSelect.value)];
+    selectedTank = catalog.tanks[parseInt(tankSelect.value)];
+    selectedFuel = catalog.fuels[parseInt(fuelSelect.value)];
+    selectedContract = contracts[parseInt(contractSelect.value)];
     
     const rocketCost = selectedEngine.cost + selectedTank.cost + selectedFuel.cost;
     const finalCost = rocketCost - selectedContract.advance; 
@@ -241,7 +241,6 @@ btnExecute.addEventListener('click', () => {
     const PREDICT_DT = PHYSICS_DT * 6;
     let crashed = false;
 
-    // WARP DE TEMPO COM CHECAGEM DE COLISÃO
     for (let i = 0; i < maneuverTime; i++) {
         moonAngle += MOON_ORBIT_SPEED * PREDICT_DT;
         const simMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE;
@@ -268,8 +267,8 @@ btnExecute.addEventListener('click', () => {
 });
 
 let isBurningPrograde = false; let isBurningRetrograde = false; let isMovingNodeFwd = false; let isMovingNodeBwd = false;
-const startEv = (flagName: string) => (e?: Event) => { if (e) e.preventDefault(); eval(`${flagName} = true`); }
-const stopEv = (flagName: string) => (e?: Event) => { if (e) e.preventDefault(); eval(`${flagName} = false`); }
+const startEv = (flagName) => (e) => { if (e) e.preventDefault(); eval(`${flagName} = true`); }
+const stopEv = (flagName) => (e) => { if (e) e.preventDefault(); eval(`${flagName} = false`); }
 
 btnPrograde.addEventListener('mousedown', startEv('isBurningPrograde')); btnPrograde.addEventListener('mouseup', stopEv('isBurningPrograde')); btnPrograde.addEventListener('mouseleave', stopEv('isBurningPrograde'));
 btnRetrograde.addEventListener('mousedown', startEv('isBurningRetrograde')); btnRetrograde.addEventListener('mouseup', stopEv('isBurningRetrograde')); btnRetrograde.addEventListener('mouseleave', stopEv('isBurningRetrograde'));
@@ -303,7 +302,7 @@ resultScreen.append(resultTitle, resultMessage, btnReturn); document.body.append
 btnReturn.addEventListener('click', () => { resultScreen.style.display = "none"; assemblyScreen.style.display = "flex"; updateAssemblyUI(); gameState = "MONTAGEM"; });
 
 const MAX_SAFE_LANDING_SPEED = 1.0;
-function endMission(target: string, impactSpeed: number) {
+function endMission(target, impactSpeed) {
     gameState = "RESULT"; hudContainer.style.display = "none"; uiContainer.style.display = "none"; resultScreen.style.display = "flex";
     isBurningPrograde = false; isBurningRetrograde = false; isPaused = false;
     
@@ -327,7 +326,7 @@ function endMission(target: string, impactSpeed: number) {
     }
 }
 
-function applyGravity(x: number, y: number, vx: number, vy: number, moonX: number, moonY: number, dt: number) {
+function applyGravity(x, y, vx, vy, moonX, moonY, dt) {
     let ax = 0, ay = 0;
     const dxE = EARTH_X - x, dyE = EARTH_Y - y; const distSqE = dxE * dxE + dyE * dyE; const distE = Math.sqrt(distSqE);
     if (distE > EARTH_RADIUS) { ax += (G * EARTH_MASS / distSqE) * (dxE / distE); ay += (G * EARTH_MASS / distSqE) * (dyE / distE); }
@@ -424,7 +423,7 @@ function drawTrajectory() {
     ctx.stroke();
 }
 
-function applyEngine(dt: number) {
+function applyEngine(dt) {
     if (rocket.currentFuel <= 0) return;
     if (isPaused) {
         if (isBurningPrograde) plannedDeltaV += selectedEngine.thrust * dt * 0.2; 
@@ -504,7 +503,9 @@ function gameLoop() {
             }
         }
         
-        
+        // ===================================
+        // DESENHANDO A NAVE E O FOGO
+        // ===================================
         ctx.save();
         ctx.translate(rocket.x, rocket.y); ctx.rotate(rocket.angle);
         if ((isBurningPrograde || isBurningRetrograde) && rocket.currentFuel > 0 && !isPaused) {
