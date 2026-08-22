@@ -1,7 +1,6 @@
 // game.js
 import { 
-    agencyFunds, catalog, contracts, 
-    selectedEngine, selectedTank, selectedFuel, selectedBooster, selectedContract, contractCompleted, 
+    agencyFunds, catalog, contracts, selectedEngine, selectedTank, selectedFuel, selectedBooster, selectedContract, contractCompleted, 
     addFunds, setContractCompleted, setSelectedParts 
 } from './data.js';
 
@@ -9,7 +8,6 @@ import {
     PHYSICS_DT, G, EARTH_MASS, EARTH_RADIUS, ATMOSPHERE_HEIGHT, EARTH_X, EARTH_Y, MOON_MASS, MOON_RADIUS, MOON_ORBIT_DISTANCE, MOON_ORBIT_SPEED, MOON_SOI, SUBSTEPS, INITIAL_ORBIT_RADIUS, INITIAL_ORBIT_SPEED, applyPhysics
 } from './physics.js';
 
-// Importa TODA a interface do ui.js
 import * as UI from './ui.js';
 
 const canvas = document.createElement('canvas');
@@ -30,6 +28,7 @@ const bgLanding = new Image(); bgLanding.src = 'images/luapouso1.png';
 
 let gameState = "MENU"; 
 let launchAlt = 0, launchX = 0, launchVx = 0, launchVy = 0, launchAngle = 0, launchFuel = 0;
+let hasBooster = false, boosterFuel = 0;
 let isBurningPrograde = false, isBurningRetrograde = false, isMovingNodeFwd = false, isMovingNodeBwd = false;
 let cameraZoom = 1.0, cameraTarget = "EARTH", isPaused = false, plannedDeltaV = 0, maneuverTime = 0; 
 let moonAngle = 0, currentMoonX = 0, currentMoonY = 0;
@@ -40,58 +39,83 @@ for (let i = 0; i < 800; i++) { stars.push({ x: (Math.random() - 0.5) * 8000, y:
 const clouds = [];
 for(let i=0; i<30; i++) { clouds.push({ x: Math.random() * 2000 - 500, y: Math.random() * 3500, w: 100 + Math.random() * 150 }); }
 
+// ============================================================
+// EVENTOS DE MOUSE E TECLADO
+// ============================================================
 const keys = { ArrowUp: false, ArrowLeft: false, ArrowRight: false };
 window.addEventListener('keydown', (e) => { 
     if (keys.hasOwnProperty(e.code)) keys[e.code] = true; 
-    
-    // SISTEMA DE DESACOPLAMENTO (ESTÁGIOS)
     if (e.code === 'Space' && hasBooster && (gameState === 'LAUNCH' || gameState === 'VOO')) {
-        hasBooster = false; // Ejeta os Boosters!
-        // Efeito visual de fumaça da ejeção
+        hasBooster = false; 
         ctx.fillStyle = "white"; ctx.fillRect(canvas.width/2 - 50, canvas.height/2 - 50, 100, 100);
     }
 });
 window.addEventListener('keyup', (e) => { if (keys.hasOwnProperty(e.code)) keys[e.code] = false; });
+window.addEventListener('wheel', (e) => { if(gameState !== "VOO") return; cameraZoom += e.deltaY * -0.001; cameraZoom = Math.min(Math.max(0.1, cameraZoom), 4.0); });
 
-// Novas Variáveis de Estágio (Adicione junto com as outras variáveis let lá no topo)
-let hasBooster = false;
-let boosterFuel = 0;
+// NOVO: Escolher o Nó com o Mouse!
+canvas.addEventListener('mousedown', (e) => {
+    if (gameState !== "VOO" || !isPaused) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    let targetX = EARTH_X; let targetY = EARTH_Y;
+    if (cameraTarget === "ROCKET") { targetX = rocket.x; targetY = rocket.y; } 
+    if (cameraTarget === "MOON") { targetX = currentMoonX; targetY = currentMoonY; }
+
+    // Converte a coordenada da tela para o Mundo 2D
+    const worldX = (mouseX - canvas.width / 2) / cameraZoom + targetX;
+    const worldY = (mouseY - canvas.height / 2) / cameraZoom + targetY;
+
+    // Simula a linha para achar onde você clicou
+    let simX = rocket.x, simY = rocket.y, simVx = rocket.vx, simVy = rocket.vy, simMoonAngle = moonAngle;
+    let closestDist = Infinity;
+    let bestTime = maneuverTime;
+
+    for (let i = 0; i < 5000; i++) {
+        simMoonAngle += MOON_ORBIT_SPEED * PHYSICS_DT * 6; 
+        const simMoonX = EARTH_X + Math.cos(simMoonAngle) * MOON_ORBIT_DISTANCE; 
+        const simMoonY = EARTH_Y + Math.sin(simMoonAngle) * MOON_ORBIT_DISTANCE;
+        const result = applyPhysics(simX, simY, simVx, simVy, simMoonX, simMoonY, PHYSICS_DT * 6); 
+        simX = result.x; simY = result.y; simVx = result.vx; simVy = result.vy;
+        
+        let drawX = simX, drawY = simY;
+        if (cameraTarget === "MOON") { drawX = currentMoonX + (simX - simMoonX); drawY = currentMoonY + (simY - simMoonY); }
+
+        const dist = Math.sqrt((drawX - worldX)**2 + (drawY - worldY)**2);
+        if (dist < closestDist) { closestDist = dist; bestTime = i; }
+
+        if (Math.sqrt((simX - EARTH_X)**2 + (simY - EARTH_Y)**2) <= EARTH_RADIUS || Math.sqrt((simX - simMoonX)**2 + (simY - simMoonY)**2) <= MOON_RADIUS) break; 
+    }
+
+    // Se clicou perto da linha, teletransporta o nó!
+    if (closestDist < 30 / cameraZoom) maneuverTime = bestTime;
+});
 
 // ============================================================
-// LÓGICA DE EVENTOS (CONECTANDO COM A UI)
+// LÓGICA DE EVENTOS (UI)
 // ============================================================
 UI.btnStart?.addEventListener('click', () => { UI.menuScreen.style.display = "none"; UI.assemblyScreen.style.display = "flex"; updateAssemblyUI(); });
 
 function updateAssemblyUI() {
-    setSelectedParts(
-        catalog.engines[parseInt(UI.engineSelect.value)], 
-        catalog.tanks[parseInt(UI.tankSelect.value)], 
-        catalog.fuels[parseInt(UI.fuelSelect.value)], 
-        catalog.boosters[parseInt(UI.boosterSelect.value)], // NOVO
-        contracts[parseInt(UI.contractSelect.value)]
-    );
-    const rocketCost = selectedEngine.cost + selectedTank.cost + selectedFuel.cost + selectedBooster.cost; 
-    const finalCost = rocketCost - selectedContract.advance; 
+    setSelectedParts(catalog.engines[parseInt(UI.engineSelect.value)], catalog.tanks[parseInt(UI.tankSelect.value)], catalog.fuels[parseInt(UI.fuelSelect.value)], catalog.boosters[parseInt(UI.boosterSelect.value)], contracts[parseInt(UI.contractSelect.value)]);
+    const rocketCost = selectedEngine.cost + selectedTank.cost + selectedFuel.cost + selectedBooster.cost; const finalCost = rocketCost - selectedContract.advance; 
     
     if (UI.contractDesc) UI.contractDesc.innerHTML = `<strong>Objetivo:</strong> ${selectedContract.desc}<br><span style="color:#a2d149;">Adiantamento: R$ ${selectedContract.advance.toLocaleString()}</span> | <span style="color:#f6a84b;">Prêmio: R$ ${selectedContract.reward.toLocaleString()}</span>`;
     if (UI.assemblyFundsDiv) UI.assemblyFundsDiv.innerText = `Caixa: R$ ${agencyFunds.toLocaleString()}`;
     if (UI.totalCostDiv) { UI.totalCostDiv.innerHTML = `Custo do Foguete: R$ ${rocketCost.toLocaleString()}<br>Gasto Efetivo: <strong>R$ ${finalCost.toLocaleString()}</strong>`; UI.totalCostDiv.style.color = finalCost > agencyFunds ? "#e7471d" : "#ffffff"; }
 }
 
-UI.boosterSelect.addEventListener('change', updateAssemblyUI); // NOVO
-UI.engineSelect.addEventListener('change', updateAssemblyUI); UI.tankSelect.addEventListener('change', updateAssemblyUI); UI.fuelSelect.addEventListener('change', updateAssemblyUI); UI.contractSelect.addEventListener('change', updateAssemblyUI);
+UI.boosterSelect.addEventListener('change', updateAssemblyUI); UI.engineSelect.addEventListener('change', updateAssemblyUI); UI.tankSelect.addEventListener('change', updateAssemblyUI); UI.fuelSelect.addEventListener('change', updateAssemblyUI); UI.contractSelect.addEventListener('change', updateAssemblyUI);
 
 UI.btnLaunch?.addEventListener('click', () => {
     const finalCost = (selectedEngine.cost + selectedTank.cost + selectedFuel.cost + selectedBooster.cost) - selectedContract.advance;
     if (agencyFunds >= finalCost) {
         addFunds(-finalCost); 
-        
-        // Inicializa o Foguete com ou sem estágios
-        hasBooster = selectedBooster.name !== "Nenhum (0kg)";
-        boosterFuel = selectedBooster.fuel;
-        
-        launchAlt = 0; launchX = 0; launchVx = 0; launchVy = 0; launchAngle = -Math.PI / 2; launchFuel = selectedTank.fuel;
-        rocket.maxFuel = selectedTank.fuel; setContractCompleted(false);
+        hasBooster = selectedBooster.name !== "Nenhum (0kg)"; boosterFuel = selectedBooster.fuel;
+        launchAlt = 0; launchX = 0; launchVx = 0; launchVy = 0; launchAngle = -Math.PI / 2; launchFuel = selectedTank.fuel; rocket.maxFuel = selectedTank.fuel; setContractCompleted(false);
         UI.assemblyScreen.style.display = "none"; gameState = "LAUNCH";
     } else alert("Sem fundos suficientes!");
 });
@@ -150,49 +174,35 @@ UI.btnPrograde.addEventListener('mousedown', startEv('isBurningPrograde')); UI.b
 UI.btnRetrograde.addEventListener('mousedown', startEv('isBurningRetrograde')); UI.btnRetrograde.addEventListener('mouseup', stopEv('isBurningRetrograde')); UI.btnRetrograde.addEventListener('mouseleave', stopEv('isBurningRetrograde'));
 UI.btnNodeNext.addEventListener('mousedown', startEv('isMovingNodeFwd')); UI.btnNodeNext.addEventListener('mouseup', stopEv('isMovingNodeFwd')); UI.btnNodeNext.addEventListener('mouseleave', stopEv('isMovingNodeFwd'));
 UI.btnNodePrev.addEventListener('mousedown', startEv('isMovingNodeBwd')); UI.btnNodePrev.addEventListener('mouseup', stopEv('isMovingNodeBwd')); UI.btnNodePrev.addEventListener('mouseleave', stopEv('isMovingNodeBwd'));
-window.addEventListener('wheel', (e) => { if(gameState !== "VOO") return; cameraZoom += e.deltaY * -0.001; cameraZoom = Math.min(Math.max(0.1, cameraZoom), 4.0); });
+
 UI.btnFocus.addEventListener('click', () => {
     if (cameraTarget === "EARTH") { cameraTarget = "ROCKET"; UI.btnFocus.innerText = "📷 Foco: Foguete"; }
     else if (cameraTarget === "ROCKET") { cameraTarget = "MOON"; UI.btnFocus.innerText = "📷 Foco: Lua"; }
     else { cameraTarget = "EARTH"; UI.btnFocus.innerText = "📷 Foco: Terra"; }
 });
 
-
+// ============================================================
+// CÁLCULOS DO MOTOR E DESENHO
+// ============================================================
 function applyEngine(dt) {
-    if (rocket.currentFuel <= 0 && (!hasBooster || boosterFuel <= 0)) return;
+    if (rocket.currentFuel <= 0) return;
+    const ispe = selectedEngine.name.includes("Titã") ? 350 : 300; const massFlow = selectedEngine.thrust / (9.81 * ispe); 
     
-    // Calcula o Empuxo total (Motor principal + Booster)
-    let activeThrust = selectedEngine.thrust;
-    if (hasBooster) {
-        if (boosterFuel > 0) activeThrust += selectedBooster.thrust; // Muita força!
-        else activeThrust *= 0.3; // PESO MORTO! Perde 70% da eficiência se não ejetar!
-    }
-
+    // REDUZIDO PARA AJUSTE FINO MAIS PRECISO (Era 3.0, agora é 0.5)
     if (isPaused) {
-        if (isBurningPrograde) plannedDeltaV += activeThrust * dt * 0.05; 
-        if (isBurningRetrograde) plannedDeltaV -= activeThrust * dt * 0.05;
-        if (isMovingNodeFwd) maneuverTime = Math.min(4900, maneuverTime + 3.0); 
-        if (isMovingNodeBwd) maneuverTime = Math.max(0, maneuverTime - 3.0);
+        if (isBurningPrograde) plannedDeltaV += selectedEngine.thrust * dt * 0.05; 
+        if (isBurningRetrograde) plannedDeltaV -= selectedEngine.thrust * dt * 0.05;
+        if (isMovingNodeFwd) maneuverTime = Math.min(4900, maneuverTime + 0.5); 
+        if (isMovingNodeBwd) maneuverTime = Math.max(0, maneuverTime - 0.5);
         return; 
     }
     
     if (!isBurningPrograde && !isBurningRetrograde) return;
     const speed = Math.sqrt(rocket.vx**2 + rocket.vy**2); if (speed <= 0) return;
     const dirX = rocket.vx / speed, dirY = rocket.vy / speed;
-    
-    if (isBurningPrograde) { rocket.vx += dirX * activeThrust * dt; rocket.vy += dirY * activeThrust * dt; }
-    if (isBurningRetrograde) { rocket.vx -= dirX * activeThrust * dt; rocket.vy -= dirY * activeThrust * dt; }
-    
-    // Queima o combustível correto
-    if (hasBooster && boosterFuel > 0) {
-        boosterFuel -= (selectedBooster.thrust / (9.81 * 250)) * 1000 * dt; 
-        if (boosterFuel < 0) boosterFuel = 0;
-    } else {
-        const ispe = selectedEngine.name.includes("Titã") ? 350 : 300; 
-        const massFlow = selectedEngine.thrust / (9.81 * ispe);
-        rocket.currentFuel -= massFlow * selectedEngine.thrust * dt * 1000; 
-        if (rocket.currentFuel < 0) rocket.currentFuel = 0;
-    }
+    if (isBurningPrograde) { rocket.vx += dirX * selectedEngine.thrust * dt; rocket.vy += dirY * selectedEngine.thrust * dt; }
+    if (isBurningRetrograde) { rocket.vx -= dirX * selectedEngine.thrust * dt; rocket.vy -= dirY * selectedEngine.thrust * dt; }
+    rocket.currentFuel -= massFlow * selectedEngine.thrust * dt * 1000; if (rocket.currentFuel < 0) rocket.currentFuel = 0;
 }
 
 function drawTrajectory() {
@@ -283,7 +293,6 @@ function startLandingMinigame() {
 }
 
 function drawLaunchRocket(thrustMag) {
-    // Foguete Principal
     ctx.fillStyle = "#cccccc"; ctx.fillRect(-8, -40, 16, 60); 
     ctx.beginPath(); ctx.moveTo(-8, -40); ctx.lineTo(0, -60); ctx.lineTo(8, -40); ctx.fill(); 
     ctx.fillStyle = "#888888";
@@ -295,12 +304,10 @@ function drawLaunchRocket(thrustMag) {
         ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.moveTo(-5, 20); ctx.lineTo(0, 30 + Math.random()*10); ctx.lineTo(5, 20); ctx.fill();
     }
 
-    // DESENHAR ESTÁGIOS AUXILIARES (BOOSTERS)
     if (hasBooster) {
         ctx.fillStyle = "#eeeeee";
-        ctx.fillRect(-22, -20, 8, 40); // Booster Esquerdo
-        ctx.fillRect(14, -20, 8, 40);  // Booster Direito
-        ctx.beginPath(); ctx.moveTo(-22, -20); ctx.lineTo(-18, -30); ctx.lineTo(-14, -20); ctx.fill(); // Bico
+        ctx.fillRect(-22, -20, 8, 40); ctx.fillRect(14, -20, 8, 40);  
+        ctx.beginPath(); ctx.moveTo(-22, -20); ctx.lineTo(-18, -30); ctx.lineTo(-14, -20); ctx.fill(); 
         ctx.beginPath(); ctx.moveTo(14, -20); ctx.lineTo(18, -30); ctx.lineTo(22, -20); ctx.fill();
 
         if (thrustMag > 0 && boosterFuel > 0) {
@@ -332,13 +339,9 @@ function drawLanderModule(isThrusting, isRcsLeft, isRcsRight) {
 function gameLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // =======================================================
-    // FASE 1: MINIJOGO DE LANÇAMENTO
-    // =======================================================
     if (gameState === "LAUNCH") {
         if (bgLaunch.complete) { ctx.drawImage(bgLaunch, 0, 0, canvas.width, canvas.height); }
         
-        // CÉU ESCURECENDO (AGORA ATÉ 60.000 METROS)
         let spaceRatio = Math.min(launchAlt / 60000, 1); 
         ctx.fillStyle = `rgba(11, 12, 16, ${spaceRatio})`; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -351,40 +354,35 @@ function gameLoop() {
         ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
         clouds.forEach(c => { let cy = canvas.height - (c.y - launchAlt); if (cy > -100 && cy < canvas.height + 100) { ctx.beginPath(); ctx.arc(c.x, cy, c.w/4, 0, Math.PI*2); ctx.arc(c.x+30, cy-10, c.w/3, 0, Math.PI*2); ctx.arc(c.x+60, cy, c.w/4, 0, Math.PI*2); ctx.fill(); } });
 
-        // ==========================================================
-        // CÁLCULO DOS BOOSTERS E FÍSICA AQUI
-        // ==========================================================
         if (keys.ArrowLeft) launchAngle -= 0.02; 
         if (keys.ArrowRight) launchAngle += 0.02;
         
         let activeThrust = selectedEngine.thrust;
         if (hasBooster) {
             if (boosterFuel > 0) activeThrust += selectedBooster.thrust;
-            else activeThrust *= 0.3; // Peso morto!
+            else activeThrust *= 0.3; 
         }
 
         let thrustMag = 0;
         if (keys.ArrowUp && (launchFuel > 0 || (hasBooster && boosterFuel > 0))) { 
-            thrustMag = activeThrust * 0.1; 
+            thrustMag = activeThrust * 0.05; // AJUSTADO: Foguete acelera 50% mais lento
             
             if (hasBooster && boosterFuel > 0) {
-                boosterFuel -= (selectedBooster.thrust / (9.81 * 250)) * 1000 * 0.02;
+                boosterFuel -= (selectedBooster.thrust / (9.81 * 250)) * 1000 * 0.01; // Consumo ajustado
             } else {
                 let ispe = selectedEngine.name.includes("Titã") ? 350 : 300;
-                launchFuel -= (selectedEngine.thrust / (9.81 * ispe)) * 1000 * 0.02;
+                launchFuel -= (selectedEngine.thrust / (9.81 * ispe)) * 1000 * 0.01; // Consumo ajustado
             }
         }
         
         launchVx += Math.cos(launchAngle) * thrustMag; 
         launchVy += Math.sin(launchAngle) * thrustMag; 
-        launchVy += 0.05; 
+        launchVy += 0.025; // AJUSTADO: Gravidade puxa 50% mais fraco
         launchAlt -= launchVy; 
         launchX += launchVx;
-        // ==========================================================
 
         if (launchAlt <= 0) { launchAlt = 0; if (launchVy > 2.0) { endMission("TERRA (Falha no Lançamento)", Math.abs(launchVy), true); return; } launchVy = 0; launchVx *= 0.9; }
 
-        // MUDAMOS PARA 60.000 METROS
         if (launchAlt > 60000 && launchVx > 4.0) {
             if (selectedContract.id === "ORBIT" && !contractCompleted) { setContractCompleted(true); addFunds(selectedContract.reward); }
             rocket.currentFuel = launchFuel; rocket.x = EARTH_X; rocket.y = EARTH_Y - INITIAL_ORBIT_RADIUS; rocket.vx = INITIAL_ORBIT_SPEED; rocket.vy = 0; rocket.angle = 0; 
@@ -401,8 +399,6 @@ function gameLoop() {
 
         ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0,0, canvas.width, 70); ctx.fillStyle = "white"; ctx.font = "bold 20px 'Segoe UI'"; ctx.textAlign = "center"; ctx.fillText("LANÇAMENTO: Pressione ⬆️ para subir e deite ➡️ para Orbitar!", canvas.width/2, 30);
         ctx.textAlign = "left"; ctx.font = "18px 'Segoe UI'"; 
-        
-        // MUDAMOS O HUD PARA REFLETIR 60.000 METROS
         ctx.fillStyle = launchAlt > 60000 ? "#a2d149" : "white"; ctx.fillText(`Altitude: ${Math.floor(launchAlt)} / 60000 m`, 20, 110); 
         ctx.fillStyle = launchVx > 4.0 ? "#a2d149" : "white"; ctx.fillText(`Vel. Horizontal: ${launchVx.toFixed(2)} / 4.0 m/s`, 20, 140); 
         ctx.fillStyle = launchFuel > 0 ? "white" : "#e7471d"; ctx.fillText(`Combustível: ${Math.floor(launchFuel)} kg`, 20, 170);
@@ -410,6 +406,42 @@ function gameLoop() {
         requestAnimationFrame(gameLoop); return;
     }
 
+    if (gameState === "LANDING") {
+        if (bgLanding.complete) { ctx.drawImage(bgLanding, 0, 0, canvas.width, canvas.height); }
+
+        ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(0,0, canvas.width, 60); ctx.fillStyle = "white"; ctx.font = "bold 20px Arial"; ctx.textAlign = "center"; ctx.fillText("USE AS SETAS DO TECLADO (⬅️ ⬆️ ➡️) PARA POUSAR NA BASE!", canvas.width/2, 35);
+        ctx.textAlign = "left"; ctx.font = "18px Arial"; ctx.fillStyle = Math.abs(lander.vy) > 2.5 ? "#e7471d" : "#a2d149"; ctx.fillText(`Queda Vertical: ${lander.vy.toFixed(2)} m/s`, 20, 100); ctx.fillStyle = Math.abs(lander.vx) > 1.0 ? "#e7471d" : "#a2d149"; ctx.fillText(`Mov. Lateral: ${lander.vx.toFixed(2)} m/s`, 20, 130); ctx.fillStyle = "white"; ctx.fillText(`Combustível: ${Math.floor(lander.fuel)} kg`, 20, 160);
+
+        if (keys.ArrowLeft) lander.angle -= 0.05; if (keys.ArrowRight) lander.angle += 0.05;
+        let isThrusting = false;
+        if (keys.ArrowUp && lander.fuel > 0) { lander.vx += Math.cos(lander.angle) * 0.15; lander.vy += Math.sin(lander.angle) * 0.15; lander.fuel -= 1.0; isThrusting = true; }
+        lander.vy += 0.05; lander.x += lander.vx; lander.y += lander.vy;
+        if (lander.x < 0) lander.x = canvas.width; if (lander.x > canvas.width) lander.x = 0;
+
+        ctx.fillStyle = "#222222"; ctx.beginPath(); ctx.moveTo(landingTerrain[0].x, canvas.height);
+        for(let i=0; i<landingTerrain.length; i++) ctx.lineTo(landingTerrain[i].x, landingTerrain[i].y);
+        ctx.lineTo(landingTerrain[landingTerrain.length-1].x, canvas.height); ctx.fill();
+
+        ctx.strokeStyle = "#444444"; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(landingTerrain[0].x, landingTerrain[0].y);
+        for(let i=1; i<landingTerrain.length; i++) ctx.lineTo(landingTerrain[i].x, landingTerrain[i].y); ctx.stroke();
+        
+        ctx.fillStyle = "rgba(162, 209, 73, 0.3)"; ctx.fillRect(landingPad.x, landingPad.y, landingPad.w, canvas.height); ctx.strokeStyle = "#a2d149"; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(landingPad.x, landingPad.y); ctx.lineTo(landingPad.x + landingPad.w, landingPad.y); ctx.stroke();
+
+        let segmentIndex = Math.floor((lander.x / canvas.width) * (landingTerrain.length - 1)); let p1 = landingTerrain[segmentIndex]; let p2 = landingTerrain[segmentIndex+1];
+        if (p1 && p2) {
+            let t = (lander.x - p1.x) / (p2.x - p1.x); let groundY = p1.y + t * (p2.y - p1.y);
+            if (lander.y + 15 >= groundY) { 
+                let isUpright = Math.abs(lander.angle - (-Math.PI/2)) < 0.3; let onPad = lander.x > landingPad.x && lander.x < landingPad.x + landingPad.w; let impactSpeed = Math.abs(lander.vy) + Math.abs(lander.vx);
+                if (onPad && isUpright && Math.abs(lander.vy) <= 2.5 && Math.abs(lander.vx) <= 1.0) { endMission("LUA (Pouso Manual)", impactSpeed, true); } 
+                else { endMission("LUA (Destruído na Superfície)", Math.max(impactSpeed, 5.0), true); }
+            }
+        }
+
+        ctx.save(); ctx.translate(lander.x, lander.y); ctx.rotate(lander.angle + Math.PI/2); 
+        drawLanderModule(isThrusting, keys.ArrowLeft && lander.fuel > 0, keys.ArrowRight && lander.fuel > 0); ctx.restore();
+        
+        requestAnimationFrame(gameLoop); return; 
+    }
 
     if (gameState === "MENU" || (gameState === "VOO" && !isPaused)) moonAngle += MOON_ORBIT_SPEED * PHYSICS_DT * SUBSTEPS;
     currentMoonX = EARTH_X + Math.cos(moonAngle) * MOON_ORBIT_DISTANCE; currentMoonY = EARTH_Y + Math.sin(moonAngle) * MOON_ORBIT_DISTANCE;
@@ -430,16 +462,12 @@ function gameLoop() {
         if (cameraTarget === "MOON") { displaySpeed = Math.sqrt((rocket.vx - mVx)**2 + (rocket.vy - mVy)**2); UI.speedText.innerHTML = `🛰️ <strong>Vel. Relativa (Lua):</strong> <span style="color:${displaySpeed < 2.0 ? '#a2d149' : '#e7471d'}">${displaySpeed.toFixed(2)} m/s</span>`; } 
         else { displaySpeed = Math.sqrt(rocket.vx**2 + rocket.vy**2); UI.speedText.innerHTML = `🛰️ <strong>Velocidade (Terra):</strong> ${displaySpeed.toFixed(2)} m/s`; }
         
-        // ==========================================
-        // STATUS DO BOOSTER AQUI!
-        // ==========================================
         UI.boosterText.innerHTML = hasBooster ? `🚀 <strong>Estágio 1:</strong> <span style="color:${boosterFuel > 0 ? '#f6a84b' : '#e7471d'}">${Math.floor(boosterFuel)} kg</span> (Aperte ESPAÇO para ejetar!)` : "";
         UI.boosterText.style.display = hasBooster ? "block" : "none";
-        // ==========================================
 
         UI.fundsText.innerHTML = `💰 <strong>Caixa:</strong> R$ ${agencyFunds.toLocaleString()}`; UI.fuelText.innerHTML = `⛽ <strong>Combustível:</strong> <span style="color:${rocket.currentFuel < 200 ? "#e7471d" : "#a2d149"}">${Math.floor(rocket.currentFuel)}</span> / ${rocket.maxFuel} kg`;
         if (isPaused) UI.planText.innerHTML = `⚙️ <strong>Planejado (ΔV):</strong> ${plannedDeltaV.toFixed(2)} m/s<br>⏱️ <strong>Tempo:</strong> +${Math.floor(maneuverTime / 10)}s`;
-
+        
         drawTrajectory();
 
         for (let i = 0; i < SUBSTEPS; i++) {
